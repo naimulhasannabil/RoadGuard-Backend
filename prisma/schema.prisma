@@ -1,0 +1,284 @@
+// Prisma schema file
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [postgis]
+}
+
+// ==================== USER MANAGEMENT ====================
+
+enum UserRole {
+  USER
+  TRUSTED_DRIVER
+  ADMIN
+}
+
+enum VehicleType {
+  CAR
+  BIKE
+  TRUCK
+  BUS
+  OTHER
+}
+
+enum UserLevel {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+model User {
+  id                String      @id @default(cuid())
+  email             String      @unique
+  password          String
+  name              String
+  phone             String?
+  avatar            String?
+  role              UserRole    @default(USER)
+  vehicleType       VehicleType @default(CAR)
+  level             UserLevel   @default(BRONZE)
+  contributionScore Int         @default(0)
+  totalReports      Int         @default(0)
+  verifiedReports   Int         @default(0)
+  isBanned          Boolean     @default(false)
+  banReason         String?
+  lastActiveAt      DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  // Relations
+  alerts            Alert[]
+  votes             AlertVote[]
+  notifications     Notification[]
+  sosRequests       SOSRequest[]
+  refreshTokens     RefreshToken[]
+
+  @@index([email])
+  @@index([role])
+  @@index([contributionScore])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ==================== ALERT SYSTEM ====================
+
+enum AlertType {
+  POTHOLE
+  ACCIDENT
+  FLOOD
+  BROKEN_ROAD
+  LANDSLIDE
+  ROAD_CLOSURE
+  POLICE_CHECKPOINT
+  HEAVY_TRAFFIC
+  FIRE
+  ANIMAL_CROSSING
+  ROADBLOCK
+  WEATHER_HAZARD
+  CONSTRUCTION
+  OTHER
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  PENDING
+  ACTIVE
+  VERIFIED
+  EXPIRED
+  REMOVED
+}
+
+model Alert {
+  id          String        @id @default(cuid())
+  type        AlertType
+  severity    AlertSeverity
+  status      AlertStatus   @default(PENDING)
+  title       String?
+  description String?
+  
+  // Location data
+  latitude    Float
+  longitude   Float
+  address     String?
+  roadName    String?
+  area        String?
+  
+  // Validation
+  upvotes     Int           @default(0)
+  downvotes   Int           @default(0)
+  isVerified  Boolean       @default(false)
+  
+  // Timestamps
+  reportedAt  DateTime      @default(now())
+  expiresAt   DateTime
+  verifiedAt  DateTime?
+  removedAt   DateTime?
+  removeReason String?
+  
+  // Relations
+  reporterId  String
+  reporter    User          @relation(fields: [reporterId], references: [id])
+  images      AlertImage[]
+  votes       AlertVote[]
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([type])
+  @@index([severity])
+  @@index([status])
+  @@index([latitude, longitude])
+  @@index([reporterId])
+  @@index([expiresAt])
+  @@index([isVerified])
+}
+
+model AlertImage {
+  id        String   @id @default(cuid())
+  url       String
+  publicId  String?  // For Cloudinary
+  alertId   String
+  alert     Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([alertId])
+}
+
+model AlertVote {
+  id        String   @id @default(cuid())
+  isUpvote  Boolean
+  userId    String
+  alertId   String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alert     Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, alertId])
+  @@index([alertId])
+  @@index([userId])
+}
+
+// ==================== NOTIFICATIONS ====================
+
+enum NotificationType {
+  NEARBY_ALERT
+  ALERT_VERIFIED
+  ALERT_EXPIRED
+  WEATHER_WARNING
+  EMERGENCY_BROADCAST
+  SYSTEM
+  SOS_NEARBY
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  data      Json?
+  isRead    Boolean          @default(false)
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ==================== SOS / EMERGENCY ====================
+
+enum SOSType {
+  AMBULANCE
+  POLICE
+  FIRE
+  BREAKDOWN
+  OTHER
+}
+
+enum SOSStatus {
+  ACTIVE
+  RESPONDED
+  RESOLVED
+  CANCELLED
+}
+
+model SOSRequest {
+  id          String    @id @default(cuid())
+  type        SOSType
+  status      SOSStatus @default(ACTIVE)
+  description String?
+  latitude    Float
+  longitude   Float
+  address     String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  respondedAt DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([latitude, longitude])
+}
+
+// ==================== ANALYTICS ====================
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  eventType String
+  data      Json
+  userId    String?
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// ==================== SYSTEM SETTINGS ====================
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ==================== OFFLINE QUEUE ====================
+
+model OfflineAlert {
+  id        String   @id @default(cuid())
+  data      Json
+  userId    String
+  processed Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([processed])
+}
