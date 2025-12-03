@@ -5,8 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider   = "postgresql"
-  extensions = [postgis]
+  provider = "postgresql"
 }
 
 // ==================== USER MANAGEMENT ====================
@@ -52,11 +51,11 @@ model User {
   updatedAt         DateTime    @updatedAt
 
   // Relations
-  alerts            Alert[]
-  votes             AlertVote[]
-  notifications     Notification[]
-  sosRequests       SOSRequest[]
-  refreshTokens     RefreshToken[]
+  alerts        Alert[]
+  votes         AlertVote[]
+  notifications Notification[]
+  sosRequests   SOSRequest[]
+  refreshTokens RefreshToken[]
 
   @@index([email])
   @@index([role])
@@ -117,34 +116,34 @@ model Alert {
   status      AlertStatus   @default(PENDING)
   title       String?
   description String?
-  
-  // Location data
-  latitude    Float
-  longitude   Float
-  address     String?
-  roadName    String?
-  area        String?
-  
-  // Validation
-  upvotes     Int           @default(0)
-  downvotes   Int           @default(0)
-  isVerified  Boolean       @default(false)
-  
-  // Timestamps
-  reportedAt  DateTime      @default(now())
-  expiresAt   DateTime
-  verifiedAt  DateTime?
-  removedAt   DateTime?
-  removeReason String?
-  
-  // Relations
-  reporterId  String
-  reporter    User          @relation(fields: [reporterId], references: [id])
-  images      AlertImage[]
-  votes       AlertVote[]
 
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  // Location data
+  latitude  Float
+  longitude Float
+  address   String?
+  roadName  String?
+  area      String?
+
+  // Validation
+  upvotes    Int     @default(0)
+  downvotes  Int     @default(0)
+  isVerified Boolean @default(false)
+
+  // Timestamps
+  reportedAt   DateTime  @default(now())
+  expiresAt    DateTime
+  verifiedAt   DateTime?
+  removedAt    DateTime?
+  removeReason String?
+
+  // Relations
+  reporterId String
+  reporter   User         @relation(fields: [reporterId], references: [id])
+  images     AlertImage[]
+  votes      AlertVote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([type])
   @@index([severity])
@@ -158,7 +157,7 @@ model Alert {
 model AlertImage {
   id        String   @id @default(cuid())
   url       String
-  publicId  String?  // For Cloudinary
+  publicId  String? // For Cloudinary
   alertId   String
   alert     Alert    @relation(fields: [alertId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
