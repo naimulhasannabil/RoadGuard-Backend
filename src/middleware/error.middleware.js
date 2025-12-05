@@ -1,7 +1,6 @@
 export const errorHandler = (err, req, res, next) => {
   console.error("Error:", err)
 
-  // Prisma errors
   if (err.code === "P2002") {
     return res.status(409).json({
       error: "A record with this value already exists",
@@ -10,40 +9,25 @@ export const errorHandler = (err, req, res, next) => {
   }
 
   if (err.code === "P2025") {
-    return res.status(404).json({
-      error: "Record not found",
-    })
+    return res.status(404).json({ error: "Record not found" })
   }
 
-  // Validation errors
   if (err.name === "ValidationError") {
-    return res.status(400).json({
-      error: "Validation failed",
-      details: err.details,
-    })
+    return res.status(400).json({ error: "Validation failed", details: err.details })
   }
 
-  // JWT errors
   if (err.name === "JsonWebTokenError") {
-    return res.status(401).json({
-      error: "Invalid token",
-    })
+    return res.status(401).json({ error: "Invalid token" })
   }
 
-  // Multer errors
   if (err.code === "LIMIT_FILE_SIZE") {
-    return res.status(400).json({
-      error: "File too large. Maximum size is 5MB",
-    })
+    return res.status(400).json({ error: "File too large. Maximum size is 5MB" })
   }
 
   if (err.code === "LIMIT_FILE_COUNT") {
-    return res.status(400).json({
-      error: "Too many files. Maximum is 5 files",
-    })
+    return res.status(400).json({ error: "Too many files. Maximum is 5 files" })
   }
 
-  // Default error
   res.status(err.status || 500).json({
     error: err.message || "Internal server error",
     ...(process.env.NODE_ENV === "development" && { stack: err.stack }),

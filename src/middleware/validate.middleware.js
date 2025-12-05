@@ -7,13 +7,8 @@ export const validate = (schema) => {
         field: detail.path.join("."),
         message: detail.message,
       }))
-
-      return res.status(400).json({
-        error: "Validation failed",
-        details,
-      })
+      return res.status(400).json({ error: "Validation failed", details })
     }
-
     next()
   }
 }
@@ -27,13 +22,8 @@ export const validateQuery = (schema) => {
         field: detail.path.join("."),
         message: detail.message,
       }))
-
-      return res.status(400).json({
-        error: "Query validation failed",
-        details,
-      })
+      return res.status(400).json({ error: "Query validation failed", details })
     }
-
     next()
   }
 }

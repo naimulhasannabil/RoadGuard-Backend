@@ -74,20 +74,13 @@ export const optionalAuth = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET)
         const user = await prisma.user.findUnique({
           where: { id: decoded.userId },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            level: true,
-          },
+          select: { id: true, email: true, name: true, role: true, level: true },
         })
         req.user = user
       } catch {
-        // Token invalid, continue without user
+        // Continue without user
       }
     }
-
     next()
   } catch (error) {
     next()
