@@ -4,35 +4,30 @@ Real-Time Driver & Traveller Alert System - Backend API
 
 ## 🚀 Quick Start
 
-1. **Navigate to backend folder**
-   ```bash
-   cd backend
-   ```
-
-2. **Install dependencies**
+1. **Install dependencies**
    ```bash
    npm install
    ```
 
-3. **Configure environment**
+2. **Configure environment**
    ```bash
    cp .env.example .env
    # Edit .env with your PostgreSQL connection string and secrets
    ```
 
-4. **Setup database**
+3. **Setup database**
    ```bash
    npm run db:generate
    npm run db:push
    npm run db:seed
    ```
 
-5. **Create uploads folder**
+4. **Create uploads folder**
    ```bash
    mkdir uploads
    ```
 
-6. **Start server**
+5. **Start server**
    ```bash
    npm run dev
    ```
