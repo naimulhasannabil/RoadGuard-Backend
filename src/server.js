@@ -27,7 +27,7 @@ const httpServer = createServer(app);
 
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: process.env.FRONTEND_URL || "http://localhost:55000",
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -39,7 +39,7 @@ app.set("io", io);
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: process.env.FRONTEND_URL || "http://localhost:55000",
     credentials: true,
   })
 );
@@ -54,7 +54,7 @@ app.use("/api/", limiter);
 
 const alertLimiter = rateLimit({
   windowMs: 2 * 60 * 1000,
-  max: 5,
+  max: process.env.NODE_ENV === "development" ? 100 : 5,
   message: {
     error: "Too many alert reports. Please wait before reporting again.",
   },

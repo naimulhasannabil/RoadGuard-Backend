@@ -1,36 +1,56 @@
-import prisma from "../config/prisma.js"
+import prisma from "../config/prisma.js";
 import {
   ALERT_TTL,
   SEVERITY_MULTIPLIER,
   CONTRIBUTION_POINTS,
   SOCKET_EVENTS,
   NEARBY_RADIUS,
-} from "../config/constants.js"
-import { updateUserLevel } from "../services/user.service.js"
-import { sendNearbyNotifications } from "../services/notification.service.js"
+} from "../config/constants.js";
+import { updateUserLevel } from "../services/user.service.js";
+import { sendNearbyNotifications } from "../services/notification.service.js";
 
 const calculateExpirationTime = (type, severity) => {
-  const baseTTL = ALERT_TTL[type] || ALERT_TTL.OTHER
-  const multiplier = SEVERITY_MULTIPLIER[severity] || 1
-  return new Date(Date.now() + baseTTL * multiplier)
-}
+  const baseTTL = ALERT_TTL[type] || ALERT_TTL.OTHER;
+  const multiplier = SEVERITY_MULTIPLIER[severity] || 1;
+  return new Date(Date.now() + baseTTL * multiplier);
+};
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371e3
-  const φ1 = (lat1 * Math.PI) / 180
-  const φ2 = (lat2 * Math.PI) / 180
-  const Δφ = ((lat2 - lat1) * Math.PI) / 180
-  const Δλ = ((lon2 - lon1) * Math.PI) / 180
-  const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
+  const R = 6371e3;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 export const createAlert = async (req, res, next) => {
   try {
-    const { type, severity, title, description, latitude, longitude, address, roadName, area, imageUrls } = req.body
-    const io = req.app.get("io")
+    console.log("📥 Received alert data:", JSON.stringify(req.body, null, 2));
 
-    const expiresAt = calculateExpirationTime(type, severity)
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Request body is empty or invalid" });
+    }
+
+    const {
+      type,
+      severity,
+      title,
+      description,
+      latitude,
+      longitude,
+      address,
+      roadName,
+      area,
+      imageUrls,
+    } = req.body;
+    const io = req.app.get("io");
+
+    const expiresAt = calculateExpirationTime(type, severity);
 
     const alert = await prisma.alert.create({
       data: {
@@ -46,25 +66,36 @@ export const createAlert = async (req, res, next) => {
         expiresAt,
         status: "ACTIVE",
         reporterId: req.user.id,
-        images: imageUrls?.length > 0 ? { create: imageUrls.map((url) => ({ url })) } : undefined,
+        images:
+          imageUrls?.length > 0
+            ? { create: imageUrls.map((url) => ({ url })) }
+            : undefined,
       },
-      include: { images: true, reporter: { select: { id: true, name: true, level: true, avatar: true } } },
-    })
+      include: {
+        images: true,
+        reporter: {
+          select: { id: true, name: true, level: true, avatar: true },
+        },
+      },
+    });
 
     await prisma.user.update({
       where: { id: req.user.id },
-      data: { totalReports: { increment: 1 }, contributionScore: { increment: CONTRIBUTION_POINTS.REPORT_ALERT } },
-    })
+      data: {
+        totalReports: { increment: 1 },
+        contributionScore: { increment: CONTRIBUTION_POINTS.REPORT_ALERT },
+      },
+    });
 
-    await updateUserLevel(req.user.id)
-    io.emit(SOCKET_EVENTS.NEW_ALERT, alert)
-    await sendNearbyNotifications(alert, io)
+    await updateUserLevel(req.user.id);
+    io.emit(SOCKET_EVENTS.NEW_ALERT, alert);
+    await sendNearbyNotifications(alert, io);
 
-    res.status(201).json(alert)
+    res.status(201).json(alert);
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const getAlerts = async (req, res, next) => {
   try {
@@ -78,8 +109,8 @@ export const getAlerts = async (req, res, next) => {
       latitude,
       longitude,
       radius = NEARBY_RADIUS.MAP_VIEW,
-    } = req.query
-    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit)
+    } = req.query;
+    const skip = (Number.parseInt(page) - 1) * Number.parseInt(limit);
 
     const where = {
       ...(status && { status }),
@@ -87,7 +118,7 @@ export const getAlerts = async (req, res, next) => {
       ...(severity && { severity }),
       ...(verified === "true" && { isVerified: true }),
       expiresAt: { gt: new Date() },
-    }
+    };
 
     const [alerts, total] = await Promise.all([
       prisma.alert.findMany({
@@ -97,14 +128,16 @@ export const getAlerts = async (req, res, next) => {
         orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
         include: {
           images: true,
-          reporter: { select: { id: true, name: true, level: true, avatar: true } },
+          reporter: {
+            select: { id: true, name: true, level: true, avatar: true },
+          },
           _count: { select: { votes: true } },
         },
       }),
       prisma.alert.count({ where }),
-    ])
+    ]);
 
-    let alertsWithDistance = alerts
+    let alertsWithDistance = alerts;
     if (latitude && longitude) {
       alertsWithDistance = alerts
         .map((alert) => ({
@@ -113,11 +146,11 @@ export const getAlerts = async (req, res, next) => {
             Number.parseFloat(latitude),
             Number.parseFloat(longitude),
             alert.latitude,
-            alert.longitude,
+            alert.longitude
           ),
         }))
         .filter((alert) => alert.distance <= Number.parseFloat(radius))
-        .sort((a, b) => a.distance - b.distance)
+        .sort((a, b) => a.distance - b.distance);
     }
 
     res.json({
@@ -128,49 +161,67 @@ export const getAlerts = async (req, res, next) => {
         total,
         totalPages: Math.ceil(total / Number.parseInt(limit)),
       },
-    })
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const getAlertById = async (req, res, next) => {
   try {
-    const { id } = req.params
+    const { id } = req.params;
 
     const alert = await prisma.alert.findUnique({
       where: { id },
       include: {
         images: true,
-        reporter: { select: { id: true, name: true, level: true, avatar: true, contributionScore: true } },
+        reporter: {
+          select: {
+            id: true,
+            name: true,
+            level: true,
+            avatar: true,
+            contributionScore: true,
+          },
+        },
         votes: { select: { userId: true, isUpvote: true } },
       },
-    })
+    });
 
-    if (!alert) return res.status(404).json({ error: "Alert not found" })
+    if (!alert) return res.status(404).json({ error: "Alert not found" });
 
-    let userVote = null
+    let userVote = null;
     if (req.user) {
-      const vote = alert.votes.find((v) => v.userId === req.user.id)
-      userVote = vote ? (vote.isUpvote ? "upvote" : "downvote") : null
+      const vote = alert.votes.find((v) => v.userId === req.user.id);
+      userVote = vote ? (vote.isUpvote ? "upvote" : "downvote") : null;
     }
 
-    res.json({ ...alert, userVote, votes: undefined })
+    res.json({ ...alert, userVote, votes: undefined });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const getNearbyAlerts = async (req, res, next) => {
   try {
-    const { latitude, longitude, radius = NEARBY_RADIUS.NOTIFICATION } = req.query
+    const {
+      latitude,
+      longitude,
+      radius = NEARBY_RADIUS.NOTIFICATION,
+    } = req.query;
 
-    if (!latitude || !longitude) return res.status(400).json({ error: "Latitude and longitude are required" })
+    if (!latitude || !longitude)
+      return res
+        .status(400)
+        .json({ error: "Latitude and longitude are required" });
 
     const alerts = await prisma.alert.findMany({
       where: { status: "ACTIVE", expiresAt: { gt: new Date() } },
-      include: { images: true, reporter: { select: { id: true, name: true, level: true } } },
-    })
+      include: {
+        images: true,
+        reporter: { select: { id: true, name: true, level: true } },
+      },
+    });
 
     const nearbyAlerts = alerts
       .map((alert) => ({
@@ -179,96 +230,123 @@ export const getNearbyAlerts = async (req, res, next) => {
           Number.parseFloat(latitude),
           Number.parseFloat(longitude),
           alert.latitude,
-          alert.longitude,
+          alert.longitude
         ),
       }))
       .filter((alert) => alert.distance <= Number.parseFloat(radius))
-      .sort((a, b) => a.distance - b.distance)
+      .sort((a, b) => a.distance - b.distance);
 
-    res.json(nearbyAlerts)
+    res.json(nearbyAlerts);
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const getAlertsByArea = async (req, res, next) => {
   try {
-    const { area, roadName, type, severity } = req.query
+    const { area, roadName, type, severity } = req.query;
 
     const alerts = await prisma.alert.findMany({
       where: {
         status: "ACTIVE",
         expiresAt: { gt: new Date() },
         ...(area && { area: { contains: area, mode: "insensitive" } }),
-        ...(roadName && { roadName: { contains: roadName, mode: "insensitive" } }),
+        ...(roadName && {
+          roadName: { contains: roadName, mode: "insensitive" },
+        }),
         ...(type && { type }),
         ...(severity && { severity }),
       },
-      include: { images: true, reporter: { select: { id: true, name: true, level: true } } },
+      include: {
+        images: true,
+        reporter: { select: { id: true, name: true, level: true } },
+      },
       orderBy: { createdAt: "desc" },
-    })
+    });
 
-    res.json(alerts)
+    res.json(alerts);
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const updateAlert = async (req, res, next) => {
   try {
-    const { id } = req.params
-    const { severity, description, status } = req.body
-    const io = req.app.get("io")
+    const { id } = req.params;
+    const { severity, description, status } = req.body;
+    const io = req.app.get("io");
 
-    const existingAlert = await prisma.alert.findUnique({ where: { id }, select: { reporterId: true } })
+    const existingAlert = await prisma.alert.findUnique({
+      where: { id },
+      select: { reporterId: true },
+    });
 
-    if (!existingAlert) return res.status(404).json({ error: "Alert not found" })
+    if (!existingAlert)
+      return res.status(404).json({ error: "Alert not found" });
     if (existingAlert.reporterId !== req.user.id && req.user.role !== "ADMIN") {
-      return res.status(403).json({ error: "Not authorized to update this alert" })
+      return res
+        .status(403)
+        .json({ error: "Not authorized to update this alert" });
     }
 
     const alert = await prisma.alert.update({
       where: { id },
-      data: { ...(severity && { severity }), ...(description && { description }), ...(status && { status }) },
-      include: { images: true, reporter: { select: { id: true, name: true, level: true } } },
-    })
+      data: {
+        ...(severity && { severity }),
+        ...(description && { description }),
+        ...(status && { status }),
+      },
+      include: {
+        images: true,
+        reporter: { select: { id: true, name: true, level: true } },
+      },
+    });
 
-    io.emit(SOCKET_EVENTS.ALERT_UPDATED, alert)
-    res.json(alert)
+    io.emit(SOCKET_EVENTS.ALERT_UPDATED, alert);
+    res.json(alert);
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const deleteAlert = async (req, res, next) => {
   try {
-    const { id } = req.params
-    const io = req.app.get("io")
+    const { id } = req.params;
+    const io = req.app.get("io");
 
-    const existingAlert = await prisma.alert.findUnique({ where: { id }, select: { reporterId: true } })
+    const existingAlert = await prisma.alert.findUnique({
+      where: { id },
+      select: { reporterId: true },
+    });
 
-    if (!existingAlert) return res.status(404).json({ error: "Alert not found" })
+    if (!existingAlert)
+      return res.status(404).json({ error: "Alert not found" });
     if (existingAlert.reporterId !== req.user.id && req.user.role !== "ADMIN") {
-      return res.status(403).json({ error: "Not authorized to delete this alert" })
+      return res
+        .status(403)
+        .json({ error: "Not authorized to delete this alert" });
     }
 
-    await prisma.alert.delete({ where: { id } })
-    io.emit(SOCKET_EVENTS.ALERT_REMOVED, { id })
-    res.json({ message: "Alert deleted successfully" })
+    await prisma.alert.delete({ where: { id } });
+    io.emit(SOCKET_EVENTS.ALERT_REMOVED, { id });
+    res.json({ message: "Alert deleted successfully" });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const processOfflineAlerts = async (req, res, next) => {
   try {
-    const { alerts } = req.body
-    const io = req.app.get("io")
-    const createdAlerts = []
+    const { alerts } = req.body;
+    const io = req.app.get("io");
+    const createdAlerts = [];
 
     for (const alertData of alerts) {
       try {
-        const expiresAt = calculateExpirationTime(alertData.type, alertData.severity)
+        const expiresAt = calculateExpirationTime(
+          alertData.type,
+          alertData.severity
+        );
 
         const alert = await prisma.alert.create({
           data: {
@@ -286,13 +364,16 @@ export const processOfflineAlerts = async (req, res, next) => {
             reporterId: req.user.id,
             reportedAt: new Date(alertData.timestamp) || new Date(),
           },
-          include: { images: true, reporter: { select: { id: true, name: true, level: true } } },
-        })
+          include: {
+            images: true,
+            reporter: { select: { id: true, name: true, level: true } },
+          },
+        });
 
-        createdAlerts.push(alert)
-        io.emit(SOCKET_EVENTS.NEW_ALERT, alert)
+        createdAlerts.push(alert);
+        io.emit(SOCKET_EVENTS.NEW_ALERT, alert);
       } catch (err) {
-        console.error("Failed to process offline alert:", err)
+        console.error("Failed to process offline alert:", err);
       }
     }
 
@@ -300,12 +381,17 @@ export const processOfflineAlerts = async (req, res, next) => {
       where: { id: req.user.id },
       data: {
         totalReports: { increment: createdAlerts.length },
-        contributionScore: { increment: CONTRIBUTION_POINTS.REPORT_ALERT * createdAlerts.length },
+        contributionScore: {
+          increment: CONTRIBUTION_POINTS.REPORT_ALERT * createdAlerts.length,
+        },
       },
-    })
+    });
 
-    res.json({ message: `Processed ${createdAlerts.length} of ${alerts.length} offline alerts`, alerts: createdAlerts })
+    res.json({
+      message: `Processed ${createdAlerts.length} of ${alerts.length} offline alerts`,
+      alerts: createdAlerts,
+    });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};

@@ -181,8 +181,12 @@ export const getVoteStatus = async (req, res, next) => {
 
 const router = Router();
 
+// Both URL patterns for compatibility
+router.post("/:alertId", authenticate, voteAlert);
 router.post("/alerts/:alertId/vote", authenticate, voteAlert);
+router.delete("/:alertId", authenticate, removeVote);
 router.delete("/alerts/:alertId/vote", authenticate, removeVote);
+router.get("/:alertId/status", authenticate, getVoteStatus);
 router.get("/alerts/:alertId/vote/status", authenticate, getVoteStatus);
 
 export default router;
